@@ -19,7 +19,7 @@ logger = logging.getLogger(__name__)
 st.set_page_config(page_title="UVIS - Unified Visual Intelligence System", layout="wide")
 
 # Logo and Title
-st.sidebar.image("assets/ui/uvis_logo.png", width=180)
+st.sidebar.image("assets/ui/logo.png", width=180)
 st.sidebar.markdown("## Visual Intelligence Engine")
 
 # File Selection - Sample or Upload
