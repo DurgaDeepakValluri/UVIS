@@ -25,75 +25,132 @@ st.sidebar.markdown("## Visual Intelligence Engine")
 # File Selection - Sample or Upload
 SAMPLE_DIR = "assets/sample_images"
 sample_images = [f for f in os.listdir(SAMPLE_DIR) if f.lower().endswith((".jpg", ".jpeg", ".png"))]
-sample_choice = st.sidebar.selectbox("🎨 Select Sample Image or Upload", ["None"] + sample_images)
+sample_choice = st.sidebar.selectbox(" Select Sample Image or Upload", ["None"] + sample_images)
 uploaded_file = None
 
 if sample_choice != "None":
+    # User chose a sample
     image_path = os.path.join(SAMPLE_DIR, sample_choice)
     image = Image.open(image_path).convert("RGB")
-    st.sidebar.image(image, caption=f"Sample: {sample_choice}", width=180)
+    st.image(image, caption=f"Sample: {sample_choice}", width=400)
+    uploaded_file = None  # Ensure this is cleared
+
 else:
-    uploaded_file = st.sidebar.file_uploader("📤 Upload Image", type=["jpg", "jpeg", "png"])
-    if uploaded_file:
-        with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
-            tmp_file.write(uploaded_file.read())
-            image_path = tmp_file.name
-        image = Image.open(image_path).convert("RGB")
-        st.sidebar.image(image, caption="Uploaded Image", width=180)
-    else:
+    # User uploads their own image
+    uploaded_file = st.file_uploader("Or Upload Your Own Image", type=["jpg", "jpeg", "png"])
+    if not uploaded_file:
+        st.info("Please upload an image (JPG, JPEG or PNG) to begin.")
+        st.stop()
+    if not uploaded_file.type.startswith("image"):
+        st.error(f"Unsupported file type: {uploaded_file.type}. Please upload a valid image file.")
         st.stop()
 
+    with tempfile.NamedTemporaryFile(delete=False) as tmp_file:
+        tmp_file.write(uploaded_file.read())
+        input_path = tmp_file.name
+    image = Image.open(input_path).convert("RGB")
+    st.image(image, caption="Uploaded Image", width=400)
+
+st.sidebar.subheader(" Select Tasks and Models")
+
+# Detection Task
+run_detection = st.sidebar.checkbox("Run Object Detection")
+detection_model = None
+if run_detection:
+    detection_model = st.sidebar.selectbox("Detection Model", ["YOLOv5Nano", "YOLOv5"], index=0)
+
+# Segmentation Task
+run_segmentation = st.sidebar.checkbox("Run Semantic Segmentation")
+segmentation_model = None
+if run_segmentation:
+    segmentation_model = st.sidebar.selectbox("Segmentation Model", ["FastSeg", "BiSeNetV2"], index=0)
+
+# Depth Task
+run_depth = st.sidebar.checkbox("Run Depth Estimation")
+depth_model = None
+if run_depth:
+    depth_model = st.sidebar.selectbox("Depth Model", ["MiDaSSmall", "DPTLite"], index=0)
+
+
 # Sidebar: Task Selection and Blend Control
-st.sidebar.markdown("## 🛠️ Perception Options")
-selected_tasks = st.sidebar.multiselect("Select Tasks", ["Object Detection", "Semantic Segmentation", "Depth Estimation"], default=["Object Detection"])
-blend_strength = st.sidebar.slider("🔧 Overlay Blend Strength", 0.0, 1.0, 0.5)
+st.sidebar.markdown("##  Perception Options")
+blend_strength = st.sidebar.slider(" Overlay Blend Strength", 0.0, 1.0, 0.5)
+
+# Pre-Run Tabs
+tab1, tab2, tab3 = st.tabs([" Scene JSON", " Scene Blueprint", " Metrics"])
+
+with tab1:
+    st.subheader("Scene JSON")
+    st.info(" Select tasks and click 'Run Analysis' to generate a structured scene description here.")
+
+with tab2:
+    st.subheader("Scene Blueprint")
+    st.image(image, caption="Preview of Uploaded or Sample Image", use_container_width=True)
+
+with tab3:
+    st.subheader("Scene Complexity Rating")
+    st.info(" Select tasks and click 'Run Analysis' to compute scene metrics here.")
 
 # Process Button
-if st.sidebar.button("🚀 Run Analysis"):
+if st.sidebar.button("Run Analysis"):
     combined_np = np.array(image)
     outputs_to_zip = {}
     scene_data = {}
 
-    for task in selected_tasks:
+    # Detection
+    if run_detection:
         try:
-            st.sidebar.markdown(f"🟡 **Running {task}...**")
-            with st.spinner(f"Processing {task}..."):
-                if task == "Object Detection":
-                    model = get_model("detection", "YOLOv5Nano", device="cpu")
-                    boxes = model.predict(image)
-                    overlay = model.draw(image, boxes)
-                    combined_np = np.array(overlay)
-                    outputs_to_zip["detection.png"] = io.BytesIO()
-                    overlay.save(outputs_to_zip["detection.png"], format="PNG")
-                    outputs_to_zip["detection.png"] = outputs_to_zip["detection.png"].getvalue()
-                    scene_data["detection"] = boxes
-
-                elif task == "Semantic Segmentation":
-                    model = get_model("segmentation", "FastSeg", device="cpu")
-                    mask = model.predict(image)
-                    overlay = model.draw(image, mask, alpha=blend_strength)
-                    combined_np = cv2.addWeighted(combined_np, 1 - blend_strength, np.array(overlay), blend_strength, 0)
-                    outputs_to_zip["segmentation.png"] = io.BytesIO()
-                    overlay.save(outputs_to_zip["segmentation.png"], format="PNG")
-                    outputs_to_zip["segmentation.png"] = outputs_to_zip["segmentation.png"].getvalue()
-                    scene_data["segmentation"] = mask.tolist()
-
-                elif task == "Depth Estimation":
-                    model = get_model("depth", "MiDaSSmall", device="cpu")
-                    depth_map = model.predict(image)
-                    depth_img = ((depth_map - np.min(depth_map)) / (np.max(depth_map) - np.min(depth_map)) * 255).astype(np.uint8)
-                    depth_pil = Image.fromarray(depth_img)
-                    combined_np = cv2.addWeighted(combined_np, 1 - blend_strength, np.array(depth_pil.convert("RGB")), blend_strength, 0)
-                    outputs_to_zip["depth_map.png"] = io.BytesIO()
-                    depth_pil.save(outputs_to_zip["depth_map.png"], format="PNG")
-                    outputs_to_zip["depth_map.png"] = outputs_to_zip["depth_map.png"].getvalue()
-                    scene_data["depth"] = depth_map.tolist()
-
-                st.sidebar.markdown(f"✅ **Completed {task}**")
+            st.sidebar.markdown(f"🟡 **Running Object Detection with {detection_model}...**")
+            with st.spinner(f"Processing {detection_model}..."):
+                model = get_model("detection", detection_model, device="cpu")
+                boxes = model.predict(image)
+                overlay = model.draw(image, boxes)
+                combined_np = np.array(overlay)
+                buf = io.BytesIO()
+                overlay.save(buf, format="PNG")
+                outputs_to_zip["detection.png"] = buf.getvalue()
+                scene_data["detection"] = boxes
+                st.sidebar.markdown(f"✅ **Completed Object Detection with {detection_model}**")
         except Exception as e:
-            st.sidebar.error(f"Error during {task}: {e}")
-            logger.error(f"Error during {task}: {e}")
-            continue
+            st.sidebar.error(f"Error during Object Detection: {e}")
+            logger.error(f"Error during Object Detection: {e}")
+
+    # Segmentation
+    if run_segmentation:
+        try:
+            st.sidebar.markdown(f"🟡 **Running Semantic Segmentation with {segmentation_model}...**")
+            with st.spinner(f"Processing {segmentation_model}..."):
+                model = get_model("segmentation", segmentation_model, device="cpu")
+                mask = model.predict(image)
+                overlay = model.draw(image, mask, alpha=blend_strength)
+                combined_np = cv2.addWeighted(combined_np, 1 - blend_strength, np.array(overlay), blend_strength, 0)
+                buf = io.BytesIO()
+                overlay.save(buf, format="PNG")
+                outputs_to_zip["segmentation.png"] = buf.getvalue()
+                scene_data["segmentation"] = mask.tolist()
+                st.sidebar.markdown(f"✅ **Completed Semantic Segmentation with {segmentation_model}**")
+        except Exception as e:
+            st.sidebar.error(f"Error during Semantic Segmentation: {e}")
+            logger.error(f"Error during Semantic Segmentation: {e}")
+
+    # Depth
+    if run_depth:
+        try:
+            st.sidebar.markdown(f"🟡 **Running Depth Estimation with {depth_model}...**")
+            with st.spinner(f"Processing {depth_model}..."):
+                model = get_model("depth", depth_model, device="cpu")
+                depth_map = model.predict(image)
+                depth_img = ((depth_map - np.min(depth_map)) / (np.max(depth_map) - np.min(depth_map)) * 255).astype(np.uint8)
+                depth_pil = Image.fromarray(depth_img)
+                combined_np = cv2.addWeighted(combined_np, 1 - blend_strength, np.array(depth_pil.convert("RGB")), blend_strength, 0)
+                buf = io.BytesIO()
+                depth_pil.save(buf, format="PNG")
+                outputs_to_zip["depth_map.png"] = buf.getvalue()
+                scene_data["depth"] = depth_map.tolist()
+                st.sidebar.markdown(f"✅ **Completed Depth Estimation with {depth_model}**")
+        except Exception as e:
+            st.sidebar.error(f"Error during Depth Estimation: {e}")
+            logger.error(f"Error during Depth Estimation: {e}")
 
     # Scene Blueprint
     combined_pil = Image.fromarray(combined_np)
@@ -111,7 +168,7 @@ if st.sidebar.button("🚀 Run Analysis"):
     outputs_to_zip["scene_description.json"] = json.dumps(scene_json, indent=2).encode("utf-8")
 
     # Tabs for Results
-    tab1, tab2, tab3 = st.tabs(["📝 Scene JSON", "🖼️ Image with Overlays", "📊 Metrics"])
+    tab1, tab2, tab3 = st.tabs([" Scene JSON", " Image with Overlays", " Metrics"])
 
     with tab1:
         st.subheader("Scene JSON")
@@ -125,10 +182,10 @@ if st.sidebar.button("🚀 Run Analysis"):
         st.subheader("Scene Complexity Rating")
         score = len(scene_data.get("detection", [])) + len(np.unique(scene_data.get("segmentation", [])))
         rating = "High" if score > 10 else "Medium" if score > 5 else "Low"
-        st.markdown(f"### 🏆 Scene Complexity: **{rating}**")
+        st.markdown(f"###  Scene Complexity: **{rating}**")
 
         if "detection" in scene_data:
-            st.markdown("### 🤖 Agent-Ready Summary")
+            st.markdown("###  Agent-Ready Summary")
             for obj in scene_data["detection"]:
                 st.write(f"- Detected **{obj.get('class_name')}** with confidence {obj.get('confidence'):.2f}")
 
