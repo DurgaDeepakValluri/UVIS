@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 st.set_page_config(page_title="UVIS - Unified Visual Intelligence System (Beta)", layout="wide")
-st.image("assets/ui/uvis_logo.png", use_column_width=False)
+st.image("assets/ui/logo.png", use_column_width=False)
 st.title("UVIS - Unified Visual Intelligence System (Beta)")
 st.write("Welcome to UVIS! Upload an image, select one or more tasks, and get a unified scene understanding. Currently supports lighter models of Depth Estimation, Object Detection, Semantic Segmentation and for images only. Will soon support heavier models, SLAM and video input too!")
 
